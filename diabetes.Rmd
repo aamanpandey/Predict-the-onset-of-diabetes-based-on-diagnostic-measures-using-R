@@ -1,0 +1,110 @@
+---
+title: "Predict the onset of diabetes based on diagnostic measures"
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r, include=FALSE}
+options(tinytex.verbose = TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+
+```{r Package}
+#importing required packages for the analysis
+pacman::p_load(caret, data.table, gains, leaps, MASS, tidyverse)
+theme_set(theme_classic())
+options(digits = 3)
+```
+
+```{r Data}
+#importing data
+data.df <- fread("diabetes.csv")
+
+#Checking the stucture of the data
+str(data.df)
+
+
+
+```
+
+```{r Data_Split}
+#spliting data into training and test data set
+split <- round(nrow(data.df) * 0.7)
+train.df <- data.df[1:split, ]
+test.df <- data.df[(split+1):nrow(data.df), ]
+
+print("Train Data")
+str(train.df)
+print("Test Data")
+str(test.df)
+
+```
+
+__Logistic Regression__  
+```{r logisticReg}
+set.seed(42)
+
+#I have used the logistic regression as it is classification
+
+logit.reg <- glm(Outcome~ ., data = train.df, family = "binomial") 
+
+options(scipen=999)
+summary(logit.reg)
+
+# Generate odds-ratios
+print("odds-ratios")
+exp(coef(logit.reg))
+```
+
+Above model state that pregnancies, Glucose, BMI, and DiabetesPedigreeFunction are most important variables in predict whether or not the patients in the dataset have diabetes or not at p value of 0.01.
+
+
+## Model Selection
+```{r modelSelection}
+logitnew <- stepAIC(logit.reg, trace = 0)  # trace = 0 suppress intermediate steps
+
+```
+
+
+## Performance Evaluation
+```{r perfEval}
+logit.reg.pred <- predict(logit.reg, test.df[, -9], type = "response")
+# response will create probability 
+t(t(head(logit.reg.pred, 10)))
+
+# generate confusion matrix
+table(test.df$Outcome, logit.reg.pred > 0.5)
+
+```
+
+#The prediction model gives an accuracy of 79.19%
+
+
+
+```{r liftChart }
+gain <- gains(test.df$Outcome, logit.reg.pred, groups = 10)
+
+  ### Plot Lift Chart
+plot(c(0,gain$cume.pct.of.total*sum(test.df$Outcome))~c(0,gain$cume.obs), 
+     xlab = "# cases", ylab = "Cumulative", main = "", type = "l")
+lines(c(0,sum(test.df$Outcome))~c(0, dim(test.df)[1]), lty = 5)
+
+```
+
+```{r Decile}
+ ### Plot decile-wise chart
+heights <- gain$mean.resp/mean(test.df$Outcome)
+midpoints <- barplot(heights, names.arg = gain$depth,  ylim = c(0,9), col = "gold3",  
+                     xlab = "Percentile", ylab = "Mean Response", 
+                     main = "Decile-wise lift chart")
+
+```
+
+
+
